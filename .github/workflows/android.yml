@@ -1,0 +1,56 @@
+
+name: Build DOMINO RIAK APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '*.zip'
+      - '.github/workflows/android.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Extract Android project
+        run: |
+          mkdir extracted
+          unzip -q domino-riak-offline-nov-24-2026-8-34-19-am.zip -d extracted
+
+      - name: Locate Gradle wrapper
+        id: gradle
+        run: |
+          WRAPPER=$(find extracted -type f -name gradlew | head -n 1)
+          if [ -z "$WRAPPER" ]; then
+            echo "Gradle wrapper not found"
+            exit 1
+          fi
+          echo "dir=$(dirname "$WRAPPER")" >> "$GITHUB_OUTPUT"
+
+      - name: Build Android APK
+        working-directory: .
+        run: |
+          cd "${{ steps.gradle.outputs.dir }}"
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: DOMINO-RIAK-APK
+          path: extracted/**/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
