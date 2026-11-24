@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build DOMINO RIAK APK
     runs-on: ubuntu-latest
 
     steps:
@@ -36,7 +36,7 @@ jobs:
           mkdir -p extracted
           unzip -q domino-riak-offline-nov-24-2026-8-34-19-am.zip -d extracted
 
-      - name: Fix Compose BOM dependency
+      - name: Fix Android dependencies
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -44,28 +44,45 @@ jobs:
           p = Path("extracted/android/gradle/libs.versions.toml")
 
           if not p.exists():
-              raise SystemExit("Gradle version catalog not found")
+              raise SystemExit("ERROR: libs.versions.toml not found")
 
           content = p.read_text()
 
-          old = 'group = "androidx.compose.bom"'
-          new = 'group = "androidx.compose"'
+          old_bom = 'group = "androidx.compose.bom", name = "compose-bom"'
+          new_bom = 'group = "androidx.compose", name = "compose-bom"'
 
-          if old in content:
-              content = content.replace(old, new)
-              p.write_text(content)
-              print("Compose BOM dependency corrected")
-          elif new in content:
-              print("Compose BOM dependency already correct")
-          else:
-              raise SystemExit("Compose BOM entry not found")
+          if old_bom in content:
+              content = content.replace(old_bom, new_bom)
+          elif new_bom not in content:
+              raise SystemExit("ERROR: Compose BOM declaration not found")
 
-      - name: Verify Android project
+          old_icons = (
+              'androidx-material-icons-extended = '
+              '{ group = "androidx.compose.material.icons", '
+              'name = "material-icons-extended" }'
+          )
+
+          new_icons = (
+              'androidx-material-icons-extended = '
+              '{ group = "androidx.compose.material.icons", '
+              'name = "material-icons-extended", version = "1.7.5" }'
+          )
+
+          if old_icons in content:
+              content = content.replace(old_icons, new_icons)
+          elif 'androidx-material-icons-extended' not in content:
+              raise SystemExit("ERROR: Material icons declaration not found")
+
+          p.write_text(content)
+          print("Android dependencies corrected successfully")
+          PY
+
+      - name: Verify project files
         run: |
           test -f extracted/android/settings.gradle.kts
           test -f extracted/android/app/build.gradle.kts
           test -f extracted/android/gradle/libs.versions.toml
-          echo "Android project files verified"
+          echo "Project verification successful"
 
       - name: Build Debug APK
         working-directory: extracted/android
