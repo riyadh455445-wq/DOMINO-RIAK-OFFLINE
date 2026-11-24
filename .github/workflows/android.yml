@@ -40,6 +40,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           p = Path("extracted/android/gradle/libs.versions.toml")
 
@@ -56,22 +57,19 @@ jobs:
           elif new_bom not in content:
               raise SystemExit("ERROR: Compose BOM declaration not found")
 
-          old_icons = (
-              'androidx-material-icons-extended = '
-              '{ group = "androidx.compose.material.icons", '
-              'name = "material-icons-extended" }'
+          pattern = r'(?m)^(\s*androidx-material-icons-extended\s*=\s*)\{.*\}\s*$'
+
+          replacement = (
+              r'\1{ group = "androidx.compose.material", '
+              r'name = "material-icons-extended", version = "1.7.5" }'
           )
 
-          new_icons = (
-              'androidx-material-icons-extended = '
-              '{ group = "androidx.compose.material.icons", '
-              'name = "material-icons-extended", version = "1.7.5" }'
-          )
+          content, count = re.subn(pattern, replacement, content)
 
-          if old_icons in content:
-              content = content.replace(old_icons, new_icons)
-          elif 'androidx-material-icons-extended' not in content:
-              raise SystemExit("ERROR: Material icons declaration not found")
+          if count != 1:
+              raise SystemExit(
+                  f"ERROR: Expected one Material Icons declaration, found {count}"
+              )
 
           p.write_text(content)
           print("Android dependencies corrected successfully")
