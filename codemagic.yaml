@@ -1,0 +1,64 @@
+
+workflows:
+  domino-android-build:
+    name: DOMINO RIAK APK
+    instance_type: linux_x2
+    environment:
+      java: 17
+    scripts:
+      - name: Extract Android project
+        script: |
+          set -e
+          ZIP_FILE="$(find "$CM_BUILD_DIR" -maxdepth 2 -type f -name '*.zip' | head -n 1)"
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: Project ZIP not found"
+            exit 1
+          fi
+          mkdir -p "$CM_BUILD_DIR/extracted"
+          unzip -q "$ZIP_FILE" -d "$CM_BUILD_DIR/extracted"
+          echo "ZIP extracted successfully"
+
+      - name: Locate Android project
+        script: |
+          set -e
+          PROJECT_DIR="$(find "$CM_BUILD_DIR/extracted" -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) -printf '%h\n' | head -n 1)"
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: Android Gradle project not found"
+            find "$CM_BUILD_DIR/extracted" -maxdepth 4 -type f
+            exit 1
+          fi
+          echo "ANDROID_PROJECT_DIR=$PROJECT_DIR" >> "$CM_ENV"
+          echo "Android project found: $PROJECT_DIR"
+
+      - name: Fix known dependency coordinates
+        script: |
+          set -e
+          python3 - <<'PY'
+          import os
+          root = os.environ.get("CM_BUILD_DIR", "") + "/extracted"
+          for base, dirs, files in os.walk(root):
+              for name in files:
+                  if name.endswith(".toml"):
+                      path = os.path.join(base, name)
+                      text = open(path, encoding="utf-8").read()
+                      text = text.replace("androidx.compose.material.icons:material-icons-extended",
+                                          "androidx.compose.material:material-icons-extended")
+                      text = text.replace("androidx.compose.material:compose-bom",
+                                          "androidx.compose:compose-bom")
+                      open(path, "w", encoding="utf-8").write(text)
+          print("Dependency coordinate check completed")
+          PY
+
+      - name: Build Android APK
+        script: |
+          set -e
+          cd "$ANDROID_PROJECT_DIR"
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew --no-daemon assembleDebug
+          else
+            gradle --no-daemon assembleDebug
+          fi
+
+    artifacts:
+      - "**/build/outputs/apk/debug/*.apk"
